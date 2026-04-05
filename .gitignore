@@ -12,6 +12,7 @@ frontend/dist/
 backend/dist/
 dist/
 build/
+backend/uploads/
 
 # Logs
 npm-debug.log*

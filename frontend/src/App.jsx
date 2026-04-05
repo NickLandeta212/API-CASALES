@@ -6,6 +6,7 @@ import AppLayout from './layouts/AppLayout.jsx'
 import OverviewPage from './pages/OverviewPage.jsx'
 import ResourcePage from './pages/ResourcePage.jsx'
 import DepartamentoDetallePage from './pages/DepartamentoDetallePage.jsx'
+import PublicReservaPage from './pages/PublicReservaPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         path="/login"
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
       />
+      <Route path="/reservas-publicas/:token" element={<PublicReservaPage />} />
       <Route
         path="/"
         element={

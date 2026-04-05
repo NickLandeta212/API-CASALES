@@ -56,6 +56,7 @@ function DepartamentoDetallePage() {
     return `${total}/10`
   }, [personas.length])
 
+
   if (!canAccess) {
     return <Navigate to="/" replace />
   }

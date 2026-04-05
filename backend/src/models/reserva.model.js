@@ -93,6 +93,17 @@ async function remove(id) {
   return result.rows[0] || null;
 }
 
+async function findReservedDates() {
+  const result = await pool.query(
+    `SELECT TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha
+     FROM reservas
+     WHERE fecha >= CURRENT_DATE
+     ORDER BY fecha ASC`
+  );
+
+  return result.rows.map((row) => row.fecha);
+}
+
 module.exports = {
   findAll,
   findById,
@@ -102,4 +113,5 @@ module.exports = {
   create,
   update,
   remove,
+  findReservedDates,
 };

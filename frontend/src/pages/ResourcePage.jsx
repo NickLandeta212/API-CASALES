@@ -3,6 +3,28 @@ import { Link, Navigate } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
+function splitReservaObservaciones(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) {
+    return { cleanedText: '', comprobantePath: '' }
+  }
+
+  const segments = raw.split('|').map((segment) => segment.trim()).filter(Boolean)
+  const comprobanteSegment = segments.find((segment) => segment.toLowerCase().startsWith('comprobante:'))
+  const comprobantePath = comprobanteSegment ? comprobanteSegment.slice('Comprobante:'.length).trim() : ''
+  const cleanedText = segments.filter((segment) => !segment.toLowerCase().startsWith('comprobante:')).join(' | ')
+
+  return { cleanedText, comprobantePath }
+}
+
+function buildApiAssetUrl(assetPath) {
+  if (!assetPath) return ''
+  if (/^https?:\/\//i.test(assetPath)) return assetPath
+
+  const baseUrl = api.defaults.baseURL || window.location.origin
+  return new URL(assetPath, `${baseUrl}/`).toString()
+}
+
 function parseDepartmentCode(value) {
   const match = String(value ?? '').match(/^T?(\d+)(D|PB|SS)(.+)$/i)
 
@@ -144,6 +166,7 @@ const configMap = {
       { key: 'departamento_numero', label: 'Depto' },
       { key: 'estado', label: 'Estado' },
       { key: 'observaciones', label: 'Obs' },
+      { key: 'comprobante', label: 'Comprobante' },
     ],
     fields: [
       { name: 'departamento_id', label: 'Departamento', type: 'select', optionsKey: 'departamentos', optionLabel: (item) => `Torre ${item.torre_numero} - Dpto ${item.numero}`, optionValue: 'id' },
@@ -207,12 +230,21 @@ function ResourcePage({ resource }) {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(config.getEmptyForm())
   const [deps, setDeps] = useState({ torres: [], departamentos: [], usuarios: [] })
+  const [reservaQrLink, setReservaQrLink] = useState('')
+  const [reservaQrImage, setReservaQrImage] = useState('')
+  const [reservaQrLoading, setReservaQrLoading] = useState(false)
+  const [reservaQrMessage, setReservaQrMessage] = useState('')
+  const [reservaQrError, setReservaQrError] = useState('')
+  const [proofModalOpen, setProofModalOpen] = useState(false)
+  const [proofModalUrl, setProofModalUrl] = useState('')
+  const [proofZoom, setProofZoom] = useState(1)
 
   const canAccess = config.allowedRoles.includes(user?.role)
   const isDepartamentosReadOnly = resource === 'departamentos'
   const canManageRecords = !isDepartamentosReadOnly && (config.writeRoles || config.allowedRoles).includes(user?.role)
   const canInspectDepartment = resource === 'departamentos'
   const showActionsColumn = canManageRecords || canInspectDepartment
+  const canManageReservaQr = resource === 'reservas' && ['admin_general', 'admin_conjunto'].includes(user?.role)
 
   useEffect(() => {
     if (!canAccess) return
@@ -258,6 +290,13 @@ function ResourcePage({ resource }) {
       mounted = false
     }
   }, [canAccess, config.dependencies, config.endpoint, resource, user?.role])
+
+  useEffect(() => {
+    if (!canManageReservaQr) return
+    if (reservaQrLink) return
+
+    handleGenerateReservaQr()
+  }, [canManageReservaQr, reservaQrLink])
 
   const normalizedDepartmentItems = useMemo(() => {
     if (resource !== 'departamentos') return []
@@ -408,7 +447,69 @@ function ResourcePage({ resource }) {
       return item._codigoNumero || normalizeLegacySpecialDNumber(item.torre_numero ?? item.torre_id, parseDepartmentCode(item.numero).codigo_tipo, parseDepartmentCode(item.numero).codigo_numero)
     }
 
+    if (resource === 'reservas' && columnKey === 'observaciones') {
+      const { cleanedText } = splitReservaObservaciones(item.observaciones)
+      return cleanedText || '-'
+    }
+
+    if (resource === 'reservas' && columnKey === 'comprobante') {
+      const { comprobantePath } = splitReservaObservaciones(item.observaciones)
+
+      if (!comprobantePath) {
+        return <span className="muted-note">Sin comprobante</span>
+      }
+
+      const imageUrl = buildApiAssetUrl(comprobantePath)
+
+      return (
+        <div className="proof-actions">
+          <button
+            type="button"
+            className="mini ghost"
+            onClick={() => {
+              setProofModalUrl(imageUrl)
+              setProofModalOpen(true)
+              setProofZoom(1)
+            }}
+          >
+            Ver preview
+          </button>
+          <a href={imageUrl} target="_blank" rel="noreferrer" className="link-btn">
+            Abrir
+          </a>
+        </div>
+      )
+    }
+
     return String(item[columnKey] ?? '')
+  }
+
+  async function handleGenerateReservaQr() {
+    setReservaQrMessage('')
+    setReservaQrError('')
+    setReservaQrLoading(true)
+
+    try {
+      const { data } = await api.get('/reservas/public-token')
+      const url = `${window.location.origin}/reservas-publicas/${data.token}`
+      setReservaQrLink(url)
+      setReservaQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`)
+      setReservaQrMessage('QR general permanente listo. Este codigo se mantiene igual para escanear siempre.')
+    } catch (requestError) {
+      setReservaQrError(requestError?.response?.data?.message || 'No se pudo generar el QR general de reservas')
+    } finally {
+      setReservaQrLoading(false)
+    }
+  }
+
+  async function handleCopyReservaQrLink() {
+    try {
+      await navigator.clipboard.writeText(reservaQrLink)
+      setReservaQrMessage('Enlace QR copiado al portapapeles')
+      setReservaQrError('')
+    } catch {
+      setReservaQrError('No se pudo copiar automaticamente. Copialo manualmente.')
+    }
   }
 
   const departmentCodePreview = useMemo(() => {
@@ -643,6 +744,38 @@ function ResourcePage({ resource }) {
       {error ? <p className="error-box">{error}</p> : null}
       {message ? <p className="ok-box">{message}</p> : null}
 
+      {canManageReservaQr ? (
+        <section className="panel" style={{ marginTop: 0 }}>
+          <div className="crud-head">
+            <div>
+              <h3 style={{ marginBottom: 8 }}>QR general permanente para reservas</h3>
+              <p className="muted-note" style={{ margin: 0 }}>Usa este mismo QR siempre. El residente escanea y selecciona torre/departamento en el formulario.</p>
+            </div>
+            <button type="button" onClick={handleGenerateReservaQr} disabled={reservaQrLoading}>
+              {reservaQrLoading ? 'Cargando...' : 'Refrescar vista QR'}
+            </button>
+          </div>
+
+          {reservaQrError ? <p className="error-box">{reservaQrError}</p> : null}
+          {reservaQrMessage ? <p className="ok-box">{reservaQrMessage}</p> : null}
+
+          {reservaQrLink ? (
+            <div className="qr-wrap">
+              <input type="text" readOnly value={reservaQrLink} />
+              <div className="btn-row">
+                <button type="button" className="ghost" onClick={handleCopyReservaQrLink}>
+                  Copiar enlace
+                </button>
+                <a className="ghost link-btn" href={reservaQrLink} target="_blank" rel="noreferrer">
+                  Abrir formulario
+                </a>
+              </div>
+              {reservaQrImage ? <img className="qr-image" src={reservaQrImage} alt="QR general de reservas" /> : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="panel">
         <div className="crud-head">
           <input
@@ -837,6 +970,73 @@ function ResourcePage({ resource }) {
           )}
         </div>
       </section>
+
+      {proofModalOpen ? (
+        <div
+          className="proof-modal-backdrop"
+          role="button"
+          tabIndex={0}
+          onClick={() => setProofModalOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+              setProofModalOpen(false)
+              setProofZoom(1)
+            }
+          }}
+        >
+          <div className="proof-modal-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="crud-head" style={{ marginBottom: 10 }}>
+              <h3>Comprobante de pago</h3>
+              <div className="proof-zoom-controls">
+                <button type="button" className="ghost" onClick={() => setProofZoom((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(2))))}>
+                  -
+                </button>
+                <button type="button" className="ghost" onClick={() => setProofZoom(1)}>
+                  100%
+                </button>
+                <button type="button" className="ghost" onClick={() => setProofZoom((prev) => Math.min(3, Number((prev + 0.1).toFixed(2))))}>
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    setProofModalOpen(false)
+                    setProofZoom(1)
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            <p className="muted-note" style={{ marginTop: 0 }}>
+              Zoom: {Math.round(proofZoom * 100)}% (tambien puedes usar la rueda del mouse)
+            </p>
+
+            {proofModalUrl ? (
+              <div
+                className="proof-modal-image-wrap"
+                onWheel={(event) => {
+                  event.preventDefault()
+                  const direction = event.deltaY > 0 ? -1 : 1
+                  setProofZoom((prev) => {
+                    const next = prev + direction * 0.1
+                    return Math.max(0.5, Math.min(3, Number(next.toFixed(2))))
+                  })
+                }}
+              >
+                <img
+                  className="proof-modal-image"
+                  src={proofModalUrl}
+                  alt="Comprobante de pago"
+                  style={{ transform: `scale(${proofZoom})` }}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
