@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 430" role="img" aria-labelledby="title desc">
+  <title id="title">Casales San Pedro</title>
+  <desc id="desc">Logo de Casales San Pedro con sol, torre verde, palmeras y base naranja.</desc>
+  <rect width="430" height="430" fill="#ffffff"/>
+  <circle cx="304" cy="104" r="60" fill="#f6d322"/>
+  <path d="M292 54 L304 25 L316 54 L347 42 L329 69 L360 81 L327 88 L340 119 L313 101 L298 132 L287 99 L258 117 L272 88 L239 79 L270 65 L253 38 Z" fill="#f1c61f" opacity="0.42"/>
+
+  <g transform="translate(0 2)">
+    <path d="M168 88 L237 70 L279 323 L143 323 Z" fill="#1f5d39"/>
+    <path d="M187 108 L226 99 L252 304 L176 304 Z" fill="#9ad74b"/>
+    <path d="M193 123 L217 118 L236 285 L181 285 Z" fill="#c7ee76" opacity="0.7"/>
+    <path d="M169 88 L237 70" stroke="#143b25" stroke-width="4" stroke-linecap="round"/>
+    <path d="M279 323 L143 323" stroke="#143b25" stroke-width="4" stroke-linecap="round"/>
+    <path d="M171 123 L194 121" stroke="#eaf7bf" stroke-width="5" stroke-linecap="round"/>
+    <path d="M177 171 L210 168" stroke="#eaf7bf" stroke-width="5" stroke-linecap="round"/>
+    <path d="M181 218 L214 215" stroke="#eaf7bf" stroke-width="5" stroke-linecap="round"/>
+    <path d="M185 265 L220 262" stroke="#eaf7bf" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <path d="M137 323 C161 306, 205 300, 259 305 C282 307, 303 311, 320 318 C300 329, 272 334, 236 335 C196 336, 156 332, 137 323 Z" fill="#d9822b"/>
+  <path d="M165 336 C182 346, 238 346, 259 336" stroke="#d9822b" stroke-width="10" stroke-linecap="round"/>
+  <path d="M187 342 C194 360, 200 376, 204 393" stroke="#d9822b" stroke-width="8" stroke-linecap="round"/>
+  <path d="M233 342 C226 360, 220 376, 216 393" stroke="#d9822b" stroke-width="8" stroke-linecap="round"/>
+
+  <g fill="#1f5d39">
+    <path d="M90 190 C98 164, 120 149, 140 146 C118 159, 108 174, 106 193 C118 185, 129 182, 146 181 C127 190, 111 205, 101 223 C96 214, 93 204, 90 190 Z"/>
+    <rect x="123" y="185" width="10" height="111" rx="4"/>
+    <path d="M126 165 C151 152, 172 154, 192 162 C174 166, 159 174, 148 186 C145 176, 136 169, 126 165 Z"/>
+    <path d="M126 170 C111 158, 92 152, 74 151 C91 160, 103 171, 109 184 C114 178, 120 173, 126 170 Z"/>
+    <path d="M128 185 C152 184, 171 191, 188 206 C170 206, 155 211, 144 219 C140 208, 134 196, 128 185 Z"/>
+    <path d="M128 184 C109 186, 89 193, 76 205 C92 206, 106 213, 118 222 C121 212, 125 199, 128 184 Z"/>
+  </g>
+
+  <g fill="#1f5d39">
+    <path d="M308 190 C316 164, 338 149, 358 146 C336 159, 326 174, 324 193 C336 185, 347 182, 364 181 C345 190, 329 205, 319 223 C314 214, 311 204, 308 190 Z"/>
+    <rect x="341" y="185" width="10" height="111" rx="4"/>
+    <path d="M344 165 C370 152, 390 154, 410 162 C392 166, 377 174, 366 186 C363 176, 354 169, 344 165 Z"/>
+    <path d="M344 170 C329 158, 310 152, 292 151 C309 160, 321 171, 327 184 C332 178, 338 173, 344 170 Z"/>
+    <path d="M346 185 C371 184, 390 191, 406 206 C388 206, 373 211, 362 219 C358 208, 352 196, 346 185 Z"/>
+    <path d="M346 184 C327 186, 307 193, 294 205 C310 206, 324 213, 336 222 C339 212, 343 199, 346 184 Z"/>
+  </g>
+
+  <g fill="#2f7d4f" font-family="Arial, sans-serif" font-style="italic" font-weight="700">
+    <text x="104" y="382" font-size="39">Casales</text>
+    <text x="110" y="414" font-size="39">San Pedro</text>
+  </g>
+</svg>

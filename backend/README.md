@@ -1,0 +1,151 @@
+# API Conjunto Habitacional
+
+Backend en Node.js con Express y PostgreSQL para administrar torres, departamentos, personas, reservas y autenticacion por roles.
+
+## Estructura
+
+- `src/config`: conexion a PostgreSQL
+- `src/controllers`: reglas de cada recurso
+- `src/models`: acceso a datos
+- `src/routes`: endpoints REST
+- `src/middlewares`: autenticacion y manejo de errores
+- `src/utils`: helpers comunes
+- `../database`: scripts SQL de schema y seed
+
+## Instalacion
+
+1. Copia `.env.example` a `.env`
+2. Ajusta credenciales de PostgreSQL (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) o `DATABASE_URL`
+3. Define un `JWT_SECRET` fuerte
+4. Ejecuta el schema en PostgreSQL
+5. Inicia el servidor con `npm start`
+
+Para cargar las torres y los departamentos base, ejecuta tambien `../database/seed.sql`.
+
+Tambien puedes inicializar todo con un comando:
+
+- `npm run db:init`
+
+Para pruebas end-to-end:
+
+- `npm run test:smoke`
+
+## Seguridad aplicada
+
+- JWT obligatorio en rutas protegidas.
+- Cabeceras de seguridad con `helmet`.
+- Rate limit en `/auth` para reducir fuerza bruta.
+- Validaciones de negocio:
+  - Maximo 10 personas por departamento (crear y actualizar).
+  - No reservas con formato de fecha invalido.
+  - No crear/actualizar departamento fuera de la capacidad de su torre.
+
+## Tablas base
+
+El archivo `../database/schema.sql` crea:
+
+- `usuarios`
+- `torres`
+- `departamentos`
+- `personas`
+- `reservas`
+
+## Ejemplos de endpoints
+
+### Auth
+
+`POST /auth/login`
+
+```json
+{
+  "email": "admin@conjunto.com",
+  "password": "Secret123!"
+}
+```
+
+### Torres
+
+`GET /torres`
+
+`POST /torres`
+
+```json
+{
+  "numero": 11,
+  "total_departamentos": 48
+}
+```
+
+### Departamentos
+
+`GET /departamentos`
+
+`POST /departamentos`
+
+```json
+{
+  "torre_id": 1,
+  "numero": 101,
+  "usuario_id": 5,
+  "tipo_ocupacion": "dueno"
+}
+```
+
+### Personas
+
+`GET /personas`
+
+`POST /personas`
+
+```json
+{
+  "departamento_id": 1,
+  "nombres": "Ana",
+  "apellidos": "Perez",
+  "documento": "1723456789",
+  "telefono": "0999999999"
+}
+```
+
+La regla de negocio limita a 10 personas por departamento.
+
+### Reservas
+
+`GET /reservas`
+
+`POST /reservas`
+
+```json
+{
+  "departamento_id": 1,
+  "fecha": "2026-05-10",
+  "estado": "reservado",
+  "observaciones": "Cumpleanos familiar"
+}
+```
+
+La fecha se maneja como unica para evitar reservas duplicadas.
+
+## Datos de prueba recomendados
+
+Ejemplo para crear un usuario administrador en PostgreSQL:
+
+```sql
+INSERT INTO usuarios (nombre, email, password_hash, role)
+VALUES ('Admin General', 'admin@conjunto.com', '$2a$10$replace_with_a_real_bcrypt_hash', 'admin_general');
+```
+
+## Pruebas con Postman
+
+Archivos listos para importar:
+
+- `postman/conjunto-api.postman_collection.json`
+- `postman/conjunto-api.postman_environment.json`
+
+Pasos recomendados:
+
+1. Inicia la API con `npm start`.
+2. Importa la coleccion y el environment en Postman.
+3. Selecciona el environment `Conjunto API Local`.
+4. Ejecuta `Auth > Login` para guardar automaticamente `token`.
+5. Ejecuta el resto de endpoints (ya vienen parametrizados con `{{baseUrl}}` y `{{token}}`).

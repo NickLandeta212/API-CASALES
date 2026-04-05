@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "App Completa (frontend + backend)",
+      "configurations": ["API Backend (run)", "Frontend Web (Vite)"]
+    }
+  ],
+  "configurations": [
+    {
+      "name": "Abrir Frontend (Chrome)",
+      "request": "launch",
+      "type": "chrome",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend"
+    },
+    {
+      "name": "API Backend (run)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/src/server.js",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "console": "internalConsole"
+    },
+    {
+      "name": "API Backend (sin terminal)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/src/server.js",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "console": "internalConsole",
+      "serverReadyAction": {
+        "pattern": "Servidor listo en (https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Frontend Web (Vite)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "internalConsole",
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    }
+  ]
+}
