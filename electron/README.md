@@ -42,4 +42,6 @@ Salida esperada:
 
 - En build empaquetado, Electron inicia automaticamente el backend interno.
 - El instalador final ya lleva configurado el backend con `DESKTOP_DATABASE_URL` y `DESKTOP_JWT_SECRET` (sin editar nada en la laptop destino).
+- Si la configuracion embebida no existe o falla, la app abre un asistente para ingresar `DATABASE_URL` y `JWT_SECRET` en el primer arranque.
+- La configuracion local del equipo destino se guarda en `%APPDATA%/Conjunto App/desktop-config.json`.
 - Si apuntas a una base remota, verifica conectividad de red desde el equipo final.
