@@ -1,11 +1,31 @@
 const path = require('path');
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const http = require('http');
+const { app, BrowserWindow, dialog } = require('electron');
 const { fork } = require('child_process');
 const fs = require('fs');
 
 let backendProcess = null;
+let backendOutputTail = '';
+let backendRestartAttempts = 0;
+let backendStableTimer = null;
+
+const MAX_BACKEND_RESTARTS = 3;
+const BACKEND_STABLE_MS = 5000;
+const BACKEND_READY_TIMEOUT_MS = 15000;
 
 const DESKTOP_CONFIG_FILE = 'desktop-config.json';
+
+function appendBackendOutput(chunk) {
+  if (!chunk) {
+    return;
+  }
+
+  backendOutputTail = `${backendOutputTail}${String(chunk)}`;
+
+  if (backendOutputTail.length > 3000) {
+    backendOutputTail = backendOutputTail.slice(-3000);
+  }
+}
 
 function parseDotEnv(content) {
   const result = {};
@@ -52,12 +72,6 @@ function readDesktopConfig() {
   }
 }
 
-function writeDesktopConfig(config) {
-  const configPath = getDesktopConfigPath();
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-}
-
 function sanitizeDesktopConfig(payload) {
   const data = payload && typeof payload === 'object' ? payload : {};
 
@@ -68,6 +82,12 @@ function sanitizeDesktopConfig(payload) {
     PUBLIC_APP_URL: String(data.PUBLIC_APP_URL || '').trim(),
     PORT: String(data.PORT || '3000').trim() || '3000',
   };
+}
+
+function removeEmptyConfigValues(config) {
+  return Object.fromEntries(
+    Object.entries(config).filter(([, value]) => String(value || '').trim())
+  );
 }
 
 function getPackagedBackendEnv() {
@@ -83,7 +103,7 @@ function getPackagedBackendEnv() {
 
 function buildEffectiveBackendEnv() {
   const packagedEnv = isDev() ? {} : getPackagedBackendEnv();
-  const userConfig = sanitizeDesktopConfig(readDesktopConfig());
+  const userConfig = removeEmptyConfigValues(sanitizeDesktopConfig(readDesktopConfig()));
 
   return {
     ...packagedEnv,
@@ -95,132 +115,46 @@ function hasRequiredBackendConfig(env) {
   return Boolean(String(env.DATABASE_URL || '').trim() && String(env.JWT_SECRET || '').trim());
 }
 
-function buildConfigWindowHtml(defaultValues) {
-  const escaped = {
-    DATABASE_URL: String(defaultValues.DATABASE_URL || '').replace(/"/g, '&quot;'),
-    JWT_SECRET: String(defaultValues.JWT_SECRET || '').replace(/"/g, '&quot;'),
-    CORS_ORIGIN: String(defaultValues.CORS_ORIGIN || '*').replace(/"/g, '&quot;'),
-    PUBLIC_APP_URL: String(defaultValues.PUBLIC_APP_URL || '').replace(/"/g, '&quot;'),
-    PORT: String(defaultValues.PORT || '3000').replace(/"/g, '&quot;'),
-  };
+function waitForBackendReady(port, timeoutMs = BACKEND_READY_TIMEOUT_MS) {
+  const startedAt = Date.now();
 
-  return `<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Configurar App</title>
-    <style>
-      body { font-family: Segoe UI, Arial, sans-serif; margin: 18px; background: #f7faf9; color: #1a2b23; }
-      h2 { margin-top: 0; }
-      p { color: #476055; }
-      label { display: block; margin: 10px 0 5px; font-weight: 600; }
-      input { width: 100%; padding: 10px; border: 1px solid #b7c6bd; border-radius: 8px; box-sizing: border-box; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      .actions { margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end; }
-      button { border: none; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
-      .save { background: #1f6b44; color: #fff; }
-      .cancel { background: #d7e3dc; color: #1a2b23; }
-      .err { margin-top: 8px; color: #912e1a; min-height: 20px; }
-    </style>
-  </head>
-  <body>
-    <h2>Configuracion inicial</h2>
-    <p>Completa los datos para iniciar el backend interno en esta laptop.</p>
-
-    <label>DATABASE_URL *</label>
-    <input id="DATABASE_URL" value="${escaped.DATABASE_URL}" placeholder="postgresql://usuario:clave@host:5432/db" />
-
-    <label>JWT_SECRET *</label>
-    <input id="JWT_SECRET" type="password" value="${escaped.JWT_SECRET}" placeholder="secreto fuerte" />
-
-    <div class="row">
-      <div>
-        <label>PORT</label>
-        <input id="PORT" value="${escaped.PORT}" placeholder="3000" />
-      </div>
-      <div>
-        <label>CORS_ORIGIN</label>
-        <input id="CORS_ORIGIN" value="${escaped.CORS_ORIGIN}" placeholder="*" />
-      </div>
-    </div>
-
-    <label>PUBLIC_APP_URL</label>
-    <input id="PUBLIC_APP_URL" value="${escaped.PUBLIC_APP_URL}" placeholder="https://tu-dominio.com" />
-
-    <div class="err" id="error"></div>
-
-    <div class="actions">
-      <button class="cancel" id="cancel">Cancelar</button>
-      <button class="save" id="save">Guardar y continuar</button>
-    </div>
-
-    <script>
-      const { ipcRenderer } = require('electron');
-      const $ = (id) => document.getElementById(id);
-
-      $('cancel').addEventListener('click', () => {
-        ipcRenderer.send('desktop-config-cancel');
-      });
-
-      $('save').addEventListener('click', () => {
-        const payload = {
-          DATABASE_URL: $('DATABASE_URL').value.trim(),
-          JWT_SECRET: $('JWT_SECRET').value.trim(),
-          PORT: $('PORT').value.trim() || '3000',
-          CORS_ORIGIN: $('CORS_ORIGIN').value.trim() || '*',
-          PUBLIC_APP_URL: $('PUBLIC_APP_URL').value.trim(),
-        };
-
-        if (!payload.DATABASE_URL || !payload.JWT_SECRET) {
-          $('error').textContent = 'DATABASE_URL y JWT_SECRET son obligatorios.';
+  return new Promise((resolve) => {
+    const attempt = () => {
+      const request = http.get({
+        hostname: '127.0.0.1',
+        port: Number(port) || 3000,
+        path: '/',
+        timeout: 1500,
+      }, (response) => {
+        response.resume();
+        if (response.statusCode && response.statusCode < 500) {
+          resolve(true);
           return;
         }
 
-        ipcRenderer.send('desktop-config-save', payload);
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+
+        setTimeout(attempt, 300);
       });
-    </script>
-  </body>
-</html>`;
-}
 
-function promptDesktopConfig(defaultValues) {
-  return new Promise((resolve) => {
-    const win = new BrowserWindow({
-      width: 640,
-      height: 620,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      autoHideMenuBar: true,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-      },
-    });
+      request.on('error', () => {
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false);
+          return;
+        }
 
-    const cleanup = () => {
-      ipcMain.removeAllListeners('desktop-config-save');
-      ipcMain.removeAllListeners('desktop-config-cancel');
+        setTimeout(attempt, 300);
+      });
+
+      request.on('timeout', () => {
+        request.destroy();
+      });
     };
 
-    ipcMain.once('desktop-config-save', (_, payload) => {
-      cleanup();
-      resolve({ action: 'save', payload: sanitizeDesktopConfig(payload) });
-      if (!win.isDestroyed()) win.close();
-    });
-
-    ipcMain.once('desktop-config-cancel', () => {
-      cleanup();
-      resolve({ action: 'cancel' });
-      if (!win.isDestroyed()) win.close();
-    });
-
-    win.on('closed', () => {
-      cleanup();
-      resolve({ action: 'cancel' });
-    });
-
-    win.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(buildConfigWindowHtml(defaultValues))}`);
+    attempt();
   });
 }
 
@@ -238,9 +172,21 @@ function getFrontendEntry() {
   };
 }
 
+async function showFrontendLoadError(detail) {
+  await dialog.showMessageBox({
+    type: 'error',
+    title: 'No se pudo abrir la interfaz',
+    message: 'La aplicacion no pudo cargar el frontend.',
+    detail,
+    buttons: ['Cerrar'],
+    defaultId: 0,
+    cancelId: 0,
+  });
+}
+
 async function startBackendForPackagedApp() {
   if (isDev()) {
-    return;
+    return true;
   }
 
   const backendRoot = path.join(process.resourcesPath, 'backend');
@@ -249,15 +195,17 @@ async function startBackendForPackagedApp() {
   let effectiveEnv = buildEffectiveBackendEnv();
 
   if (!hasRequiredBackendConfig(effectiveEnv)) {
-    const response = await promptDesktopConfig(effectiveEnv);
-
-    if (response.action !== 'save') {
-      app.quit();
-      return;
-    }
-
-    writeDesktopConfig(response.payload);
-    effectiveEnv = buildEffectiveBackendEnv();
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Configuracion incompleta',
+      message: 'No se puede iniciar la aplicacion porque faltan DATABASE_URL o JWT_SECRET en la configuracion embebida del instalador.',
+      detail: 'Genera nuevamente el instalador incluyendo backend/.env.desktop con los valores requeridos.',
+      buttons: ['Cerrar'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    app.quit();
+    return false;
   }
 
   backendProcess = fork(backendEntry, {
@@ -268,36 +216,76 @@ async function startBackendForPackagedApp() {
       NODE_ENV: 'production',
       ALLOW_START_WITHOUT_DB: effectiveEnv.ALLOW_START_WITHOUT_DB || process.env.ALLOW_START_WITHOUT_DB || 'false',
     },
-    stdio: 'inherit',
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
 
+  backendOutputTail = '';
+  backendProcess.stdout?.on('data', (chunk) => appendBackendOutput(chunk));
+  backendProcess.stderr?.on('data', (chunk) => appendBackendOutput(chunk));
+
+  if (backendStableTimer) {
+    clearTimeout(backendStableTimer);
+    backendStableTimer = null;
+  }
+
+  backendStableTimer = setTimeout(() => {
+    backendRestartAttempts = 0;
+  }, BACKEND_STABLE_MS);
+
   backendProcess.once('exit', async (code, signal) => {
+    if (backendStableTimer) {
+      clearTimeout(backendStableTimer);
+      backendStableTimer = null;
+    }
+
     if (!app.isQuitting) {
-      const buttonIndex = await dialog.showMessageBox({
+      if (backendRestartAttempts < MAX_BACKEND_RESTARTS) {
+        backendRestartAttempts += 1;
+        await startBackendForPackagedApp();
+        return;
+      }
+
+      await dialog.showMessageBox({
         type: 'error',
         title: 'Backend detenido',
         message: `El backend se cerró inesperadamente. Code: ${code ?? 'n/a'}, Signal: ${signal ?? 'n/a'}`,
-        detail: 'Puedes reconfigurar la conexion y reintentar.',
-        buttons: ['Reconfigurar', 'Salir'],
+        detail: [
+          'Cierra y vuelve a abrir la aplicacion. Si el problema persiste, revisa la configuracion de base de datos embebida del instalador.',
+          backendOutputTail ? `\n\nUltimos logs del backend:\n${backendOutputTail.trim()}` : '',
+        ].join(''),
+        buttons: ['Salir'],
         defaultId: 0,
-        cancelId: 1,
+        cancelId: 0,
       });
-
-      if (buttonIndex.response === 0) {
-        const response = await promptDesktopConfig(buildEffectiveBackendEnv());
-        if (response.action === 'save') {
-          writeDesktopConfig(response.payload);
-          await startBackendForPackagedApp();
-          return;
-        }
-      }
 
       app.quit();
     }
   });
+
+  const backendReady = await waitForBackendReady(effectiveEnv.PORT);
+  if (!backendReady) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Backend no disponible',
+      message: 'La API interna no respondio a tiempo al iniciar.',
+      detail: backendOutputTail ? `Ultimos logs del backend:\n${backendOutputTail.trim()}` : 'Verifica DATABASE_URL, JWT_SECRET y conectividad a la base de datos.',
+      buttons: ['Cerrar'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    app.quit();
+    return false;
+  }
+
+  return true;
 }
 
 function stopBackend() {
+  if (backendStableTimer) {
+    clearTimeout(backendStableTimer);
+    backendStableTimer = null;
+  }
+
   if (!backendProcess || backendProcess.killed) {
     return;
   }
@@ -306,12 +294,13 @@ function stopBackend() {
   backendProcess = null;
 }
 
-function createWindow() {
+async function createWindow() {
   const win = new BrowserWindow({
     width: 1366,
     height: 820,
     minWidth: 1100,
     minHeight: 700,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -321,21 +310,59 @@ function createWindow() {
 
   const entry = getFrontendEntry();
 
+  win.once('ready-to-show', () => {
+    win.show();
+  });
+
+  win.webContents.on('did-fail-load', async (_, errorCode, errorDescription, validatedURL) => {
+    if (app.isQuitting) {
+      return;
+    }
+
+    await showFrontendLoadError(
+      `Error de carga (${errorCode}): ${errorDescription}\nURL: ${validatedURL || 'n/a'}`
+    );
+    app.quit();
+  });
+
   if (entry.type === 'url') {
-    win.loadURL(entry.value);
+    try {
+      await win.loadURL(entry.value);
+    } catch (error) {
+      await showFrontendLoadError(`No se pudo abrir ${entry.value}\n\n${error.message}`);
+      app.quit();
+      return;
+    }
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(entry.value);
+    if (!fs.existsSync(entry.value)) {
+      await showFrontendLoadError(
+        `No existe el archivo esperado del frontend:\n${entry.value}\n\nGenera nuevamente el instalador.`
+      );
+      app.quit();
+      return;
+    }
+
+    try {
+      await win.loadFile(entry.value);
+    } catch (error) {
+      await showFrontendLoadError(`No se pudo abrir ${entry.value}\n\n${error.message}`);
+      app.quit();
+    }
   }
 }
 
 app.on('ready', async () => {
-  await startBackendForPackagedApp();
-  createWindow();
+  const backendStarted = await startBackendForPackagedApp();
+  if (!backendStarted) {
+    return;
+  }
+  await createWindow();
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    app.isQuitting = true;
     app.quit();
   }
 });
@@ -345,8 +372,8 @@ app.on('before-quit', () => {
   stopBackend();
 });
 
-app.on('activate', () => {
+app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    await createWindow();
   }
 });
