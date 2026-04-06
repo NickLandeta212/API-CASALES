@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { useAuth } from './context/AuthContext.jsx'
+import { useAuth } from './context/useAuth'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import AppLayout from './layouts/AppLayout.jsx'

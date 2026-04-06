@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../context/useAuth'
 import logo from '../assets/casales-san-pedro-logo.svg'
 
 function AppLayout() {

@@ -2,13 +2,16 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "db:init": "node scripts/init-db.js",
     "user:create-admin": "node scripts/create-admin.js",
     "user:create": "node scripts/create-user.js",
+    "replicate:1-4": "node scripts/replicate-departamentos.js --from=1 --to=2,3,4 --include-ss",
+    "replicate:1-5-6-7": "node scripts/replicate-departamentos.js --from=1 --to=5,6,7",
+    "replicate:8-9-10": "node scripts/replicate-departamentos.js --from=8 --to=9,10",
     "test:smoke": "node scripts/smoke-test.js",
     "test": "echo \"No tests configured\" && exit 0"
   },
