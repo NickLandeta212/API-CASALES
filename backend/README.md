@@ -17,8 +17,10 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 1. Copia `.env.example` a `.env`
 2. Ajusta credenciales de PostgreSQL (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) o `DATABASE_URL`
 3. Define un `JWT_SECRET` fuerte
-4. Ejecuta el schema en PostgreSQL
-5. Inicia el servidor con `npm start`
+4. Si el QR publico se usara fuera de red local, define `PUBLIC_APP_URL` con tu dominio publico (ejemplo: `https://app.tudominio.com`)
+5. Ajusta `CORS_ORIGIN` con tus origenes permitidos (separados por comas)
+6. Ejecuta el schema en PostgreSQL
+7. Inicia el servidor con `npm start`
 
 Para cargar las torres y los departamentos base, ejecuta tambien `../database/seed.sql`.
 

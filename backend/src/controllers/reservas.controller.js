@@ -10,6 +10,27 @@ const torreModel = require('../models/torre.model');
 
 const validStates = ['disponible', 'en_proceso', 'reservado'];
 
+function stripTrailingSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function getPublicAppUrl(req) {
+  const configured = stripTrailingSlash(process.env.PUBLIC_APP_URL);
+
+  if (configured) {
+    return configured;
+  }
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+
+  if (!forwardedHost) {
+    return '';
+  }
+
+  return `${forwardedProto}://${forwardedHost}`;
+}
+
 function createPublicReservaToken() {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET no configurado en el servidor');
@@ -219,8 +240,13 @@ const remove = asyncHandler(async (req, res) => {
 
 const generatePublicToken = asyncHandler(async (req, res) => {
   const token = createPublicReservaToken();
+  const publicAppUrl = getPublicAppUrl(req);
 
-  res.json({ token });
+  const publicUrl = publicAppUrl
+    ? `${publicAppUrl}/reservas-publicas/${token}`
+    : `/reservas-publicas/${token}`;
+
+  res.json({ token, public_url: publicUrl });
 });
 
 const publicContext = asyncHandler(async (req, res) => {

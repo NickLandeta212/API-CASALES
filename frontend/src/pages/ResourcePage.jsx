@@ -25,6 +25,16 @@ function buildApiAssetUrl(assetPath) {
   return new URL(assetPath, `${baseUrl}/`).toString()
 }
 
+function stripTrailingSlash(value) {
+  return String(value ?? '').trim().replace(/\/+$/, '')
+}
+
+function resolvePublicAppBaseUrl() {
+  const configured = stripTrailingSlash(import.meta.env.VITE_PUBLIC_APP_URL)
+  if (configured) return configured
+  return stripTrailingSlash(window.location.origin)
+}
+
 function parseDepartmentCode(value) {
   const match = String(value ?? '').match(/^T?(\d+)(D|PB|SS)(.+)$/i)
 
@@ -491,7 +501,9 @@ function ResourcePage({ resource }) {
 
     try {
       const { data } = await api.get('/reservas/public-token')
-      const url = `${window.location.origin}/reservas-publicas/${data.token}`
+      const publicBase = resolvePublicAppBaseUrl()
+      const fallbackUrl = `${publicBase}/reservas-publicas/${data.token}`
+      const url = String(data.public_url || '').trim() || fallbackUrl
       setReservaQrLink(url)
       setReservaQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`)
       setReservaQrMessage('QR general permanente listo. Este codigo se mantiene igual para escanear siempre.')
