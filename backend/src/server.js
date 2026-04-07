@@ -23,8 +23,8 @@ async function bootstrap() {
     console.warn('Servidor iniciado sin validar PostgreSQL:', error.message);
   }
 
-  app.listen(PORT, () => {
-    console.log(`Servidor listo en http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor listo en http://0.0.0.0:${PORT}`);
   });
 }
 

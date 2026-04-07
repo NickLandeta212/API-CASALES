@@ -1,14 +1,24 @@
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const { fork } = require('child_process');
 const { app, BrowserWindow, dialog } = require('electron');
 
 const DESKTOP_CONFIG_FILE = 'desktop-config.json';
 const DEFAULT_DEV_API_BASE_URL = 'http://127.0.0.1:3000';
 const DEFAULT_DEV_PUBLIC_APP_URL = 'http://localhost:5173';
+const MAX_BACKEND_RESTARTS = 3;
+const BACKEND_STABLE_MS = 5000;
+const BACKEND_READY_TIMEOUT_MS = 15000;
 
+let backendProcess = null;
+let backendOutputTail = '';
+let backendRestartAttempts = 0;
+let backendStableTimer = null;
+let backendBaseUrl = DEFAULT_DEV_API_BASE_URL;
 let runtimeConfig = {
   API_BASE_URL: DEFAULT_DEV_API_BASE_URL,
-  PUBLIC_APP_URL: DEFAULT_DEV_PUBLIC_APP_URL,
+  PUBLIC_APP_URL: '',
 };
 
 function isDev() {
@@ -73,7 +83,10 @@ function buildRuntimeDesktopConfig() {
         API_BASE_URL: DEFAULT_DEV_API_BASE_URL,
         PUBLIC_APP_URL: DEFAULT_DEV_PUBLIC_APP_URL,
       }
-    : {};
+    : {
+        API_BASE_URL: DEFAULT_DEV_API_BASE_URL,
+        PUBLIC_APP_URL: '',
+      };
 
   return removeEmptyConfigValues({
     ...defaultConfig,
@@ -84,7 +97,102 @@ function buildRuntimeDesktopConfig() {
 }
 
 function hasRequiredDesktopConfig(config) {
-  return Boolean(String(config.API_BASE_URL || '').trim() && String(config.PUBLIC_APP_URL || '').trim());
+  return Boolean(String(config.API_BASE_URL || '').trim());
+}
+
+function resolveBackendBaseUrl(portValue) {
+  const port = Number(portValue) || 3000;
+  return `http://127.0.0.1:${port}`;
+}
+
+function appendBackendOutput(chunk) {
+  if (!chunk) {
+    return;
+  }
+
+  backendOutputTail = `${backendOutputTail}${String(chunk)}`;
+  if (backendOutputTail.length > 3000) {
+    backendOutputTail = backendOutputTail.slice(-3000);
+  }
+}
+
+function getPackagedBackendEnv() {
+  const backendRoot = path.join(process.resourcesPath, 'backend');
+  const desktopEnvPath = path.join(backendRoot, '.env.desktop');
+
+  if (!fs.existsSync(desktopEnvPath)) {
+    return {};
+  }
+
+  const env = {};
+  for (const rawLine of fs.readFileSync(desktopEnvPath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) continue;
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    env[key] = value;
+  }
+
+  return env;
+}
+
+function buildEffectiveBackendEnv() {
+  const packagedEnv = isDev() ? {} : getPackagedBackendEnv();
+  const userConfig = removeEmptyConfigValues(parseDesktopConfigPayload(readDesktopConfigFile(path.join(app.getPath('userData'), DESKTOP_CONFIG_FILE))));
+
+  return {
+    ...packagedEnv,
+    ...userConfig,
+  };
+}
+
+function hasRequiredBackendConfig(env) {
+  return Boolean(String(env.DATABASE_URL || '').trim() && String(env.JWT_SECRET || '').trim());
+}
+
+function waitForBackendReady(port, timeoutMs = BACKEND_READY_TIMEOUT_MS) {
+  const startedAt = Date.now();
+
+  return new Promise((resolve) => {
+    const attempt = () => {
+      const request = http.get({
+        hostname: '127.0.0.1',
+        port: Number(port) || 3000,
+        path: '/',
+        timeout: 1500,
+      }, (response) => {
+        response.resume();
+        if (response.statusCode && response.statusCode < 500) {
+          resolve(true);
+          return;
+        }
+
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+
+        setTimeout(attempt, 300);
+      });
+
+      request.on('error', () => {
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+
+        setTimeout(attempt, 300);
+      });
+
+      request.on('timeout', () => {
+        request.destroy();
+      });
+    };
+
+    attempt();
+  });
 }
 
 function getFrontendEntry() {
@@ -105,7 +213,7 @@ async function showConfigurationError(detail) {
   await dialog.showMessageBox({
     type: 'error',
     title: 'Configuracion incompleta',
-    message: 'La aplicacion no tiene configurada la API central.',
+    message: 'La aplicacion no tiene configurada la base de datos.',
     detail,
     buttons: ['Cerrar'],
     defaultId: 0,
@@ -125,9 +233,107 @@ async function showFrontendLoadError(detail) {
   });
 }
 
+async function startBackendForPackagedApp() {
+  if (isDev()) {
+    return true;
+  }
+
+  const backendRoot = path.join(process.resourcesPath, 'backend');
+  const backendEntry = path.join(backendRoot, 'src', 'server.js');
+
+  const effectiveEnv = buildEffectiveBackendEnv();
+  backendBaseUrl = resolveBackendBaseUrl(effectiveEnv.PORT);
+
+  if (!hasRequiredBackendConfig(effectiveEnv)) {
+    await showConfigurationError(
+      'Falta definir DATABASE_URL o JWT_SECRET en la configuracion embebida del instalador.'
+    );
+    app.quit();
+    return false;
+  }
+
+  backendProcess = fork(backendEntry, {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      ...effectiveEnv,
+      NODE_ENV: 'production',
+      ALLOW_START_WITHOUT_DB: effectiveEnv.ALLOW_START_WITHOUT_DB || process.env.ALLOW_START_WITHOUT_DB || 'false',
+    },
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+
+  backendOutputTail = '';
+  backendProcess.stdout?.on('data', (chunk) => appendBackendOutput(chunk));
+  backendProcess.stderr?.on('data', (chunk) => appendBackendOutput(chunk));
+
+  if (backendStableTimer) {
+    clearTimeout(backendStableTimer);
+    backendStableTimer = null;
+  }
+
+  backendStableTimer = setTimeout(() => {
+    backendRestartAttempts = 0;
+  }, BACKEND_STABLE_MS);
+
+  backendProcess.once('exit', async (code, signal) => {
+    if (backendStableTimer) {
+      clearTimeout(backendStableTimer);
+      backendStableTimer = null;
+    }
+
+    if (!app.isQuitting) {
+      if (backendRestartAttempts < MAX_BACKEND_RESTARTS) {
+        backendRestartAttempts += 1;
+        await startBackendForPackagedApp();
+        return;
+      }
+
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Backend detenido',
+        message: `El backend se cerró inesperadamente. Code: ${code ?? 'n/a'}, Signal: ${signal ?? 'n/a'}`,
+        detail: [
+          'Cierra y vuelve a abrir la aplicacion. Si el problema persiste, revisa la configuracion de base de datos embebida del instalador.',
+          backendOutputTail ? `\n\nUltimos logs del backend:\n${backendOutputTail.trim()}` : '',
+        ].join(''),
+        buttons: ['Salir'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+
+      app.quit();
+    }
+  });
+
+  const backendReady = await waitForBackendReady(effectiveEnv.PORT);
+  if (!backendReady) {
+    await showFrontendLoadError(
+      backendOutputTail ? `Ultimos logs del backend:\n${backendOutputTail.trim()}` : 'El backend interno no respondio a tiempo.'
+    );
+    app.quit();
+    return false;
+  }
+
+  return true;
+}
+
+function stopBackend() {
+  if (backendStableTimer) {
+    clearTimeout(backendStableTimer);
+    backendStableTimer = null;
+  }
+
+  if (!backendProcess || backendProcess.killed) {
+    return;
+  }
+
+  backendProcess.kill('SIGTERM');
+  backendProcess = null;
+}
+
 async function createWindow() {
-  process.env.DESKTOP_API_BASE_URL = runtimeConfig.API_BASE_URL;
-  process.env.DESKTOP_PUBLIC_APP_URL = runtimeConfig.PUBLIC_APP_URL;
+  process.env.DESKTOP_API_BASE_URL = backendBaseUrl;
 
   const win = new BrowserWindow({
     width: 1366,
@@ -191,11 +397,8 @@ async function createWindow() {
 app.on('ready', async () => {
   runtimeConfig = buildRuntimeDesktopConfig();
 
-  if (!hasRequiredDesktopConfig(runtimeConfig)) {
-    await showConfigurationError(
-      'Falta definir DESKTOP_API_BASE_URL y DESKTOP_PUBLIC_APP_URL para el instalador.\n\nGenera nuevamente el build con electron/scripts/prepare-desktop-config.js o edita %APPDATA%/Conjunto App/desktop-config.json.'
-    );
-    app.quit();
+  const backendStarted = await startBackendForPackagedApp();
+  if (!backendStarted) {
     return;
   }
 
@@ -211,6 +414,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
+  stopBackend();
 });
 
 app.on('activate', async () => {

@@ -28,17 +28,22 @@ function required(name, fallbackValues = {}) {
   return value;
 }
 
+function optional(name, fallback = '', fallbackValues = {}) {
+  const value = stripTrailingSlash(process.env[name] || fallbackValues[name] || '');
+  return value || fallback;
+}
+
 function run() {
   const target = path.resolve(__dirname, '../assets/desktop-config.json');
   const existingValues = readJsonFile(target);
   const fallbackValues = {
-    DESKTOP_API_BASE_URL: existingValues.API_BASE_URL,
+    DESKTOP_API_BASE_URL: existingValues.API_BASE_URL || 'http://127.0.0.1:3000',
     DESKTOP_PUBLIC_APP_URL: existingValues.PUBLIC_APP_URL,
   };
 
   const payload = {
-    API_BASE_URL: required('DESKTOP_API_BASE_URL', fallbackValues),
-    PUBLIC_APP_URL: required('DESKTOP_PUBLIC_APP_URL', fallbackValues),
+    API_BASE_URL: optional('DESKTOP_API_BASE_URL', 'http://127.0.0.1:3000', fallbackValues),
+    PUBLIC_APP_URL: optional('DESKTOP_PUBLIC_APP_URL', '', fallbackValues),
   };
 
   fs.writeFileSync(target, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');

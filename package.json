@@ -38,6 +38,26 @@
       "frontend/dist/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!postman/**/*",
+          "!README.md",
+          "!.env.example",
+          "!.env",
+          "!.env.local",
+          "!.env.development",
+          "!.env.production",
+          "!.env.test"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "backend/**"
+    ],
     "win": {
       "icon": "electron/assets/icon.ico",
       "artifactName": "Conjunto-App-Setup-${version}.${ext}",

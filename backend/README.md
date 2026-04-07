@@ -17,7 +17,7 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 1. Copia `.env.example` a `.env`
 2. Ajusta credenciales de PostgreSQL (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) o `DATABASE_URL`
 3. Define un `JWT_SECRET` fuerte
-4. Si el QR publico se usara fuera de red local, define `PUBLIC_APP_URL` con tu dominio publico (ejemplo: `https://app.tudominio.com`)
+4. Si el QR publico se usara fuera de red local, define `PUBLIC_APP_URL` con tu dominio publico (ejemplo: `https://app.tudominio.com`). Si no lo defines, la app igual arranca, pero el QR dependera de la URL que devuelva el backend.
 5. Ajusta `CORS_ORIGIN` con tus origenes permitidos (separados por comas)
 6. Ejecuta el schema en PostgreSQL
 7. Inicia el servidor con `npm start`
@@ -25,6 +25,17 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 ## Despliegue online
 
 Este backend es el punto central que deben consumir todas las PCs y la version web. Para sincronizar datos entre dispositivos, desplegalo en un servidor unico con una base PostgreSQL compartida y usa la misma URL desde el desktop.
+
+Si vas a usar Supabase, crea el proyecto, toma la cadena de conexion de Postgres y configúrala como `DATABASE_URL`. Supabase exige SSL, asi que deja `PGSSL=true` o agrega `sslmode=require` en la URL.
+
+Ejemplo:
+
+```bash
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres?sslmode=require
+PGSSL=true
+JWT_SECRET=una_clave_larga_y_segura
+PUBLIC_APP_URL=https://app.tu-dominio.com
+```
 
 Variables recomendadas para produccion:
 

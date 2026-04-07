@@ -17,16 +17,15 @@ Esto levanta:
 
 ## Generar instalador .exe
 
-La version de escritorio ya no embebe un backend local. Todas las PCs deben apuntar a una API central desplegada en linea y a una URL publica unica para el QR.
+La version de escritorio vuelve a incluir el backend dentro del instalador. Eso permite probarlo en otra PC sin depender de una API publica externa, usando la base de datos de Supabase que ya configuraste.
 
-Antes de generar el instalador, define las variables para embebidas en el desktop:
+Antes de generar el instalador, define opcionalmente la URL publica del QR si ya tienes una web para abrir desde el celular:
 
 ```powershell
-$env:DESKTOP_API_BASE_URL="https://api.tu-dominio.com"
 $env:DESKTOP_PUBLIC_APP_URL="https://app.tu-dominio.com"
 ```
 
-Si quieres reutilizar valores ya guardados, el build toma la configuracion previa de `electron/assets/desktop-config.json`.
+Si no defines nada, el instalador usa la configuracion local por defecto y el backend embebido.
 
 Desde la raiz del proyecto:
 
@@ -42,8 +41,7 @@ Salida esperada:
 
 ## Notas importantes
 
-- El .exe ya no levanta un backend interno; solo consume la API central configurada.
-- Todas las PCs deben usar la misma `DESKTOP_API_BASE_URL` para que los datos se sincronicen entre dispositivos.
-- `DESKTOP_PUBLIC_APP_URL` se usa para generar los QR publicos de reservas.
+- El .exe levanta un backend interno y se conecta a la base de datos embebida del instalador.
+- `DESKTOP_PUBLIC_APP_URL` se usa para generar los QR publicos de reservas y puede quedar vacio si solo quieres que el desktop abra.
 - Si la app arranca sin configuracion valida, muestra error y se cierra para evitar un estado parcial.
 - La configuracion local del equipo destino se guarda en `%APPDATA%/Conjunto App/desktop-config.json` y puede sobreescribir la configuracion embebida.

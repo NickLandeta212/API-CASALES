@@ -25,6 +25,8 @@ Monorepo separado por responsabilidades:
    - define `DESKTOP_API_BASE_URL` y `DESKTOP_PUBLIC_APP_URL`
    - ejecuta `npm run desktop:dist`
 
+Si quieres que varios dispositivos compartan datos en tiempo real, la base de datos central puede ser Supabase Postgres; el backend ya acepta `DATABASE_URL` con SSL.
+
 ## Estructura
 
 - database/schema.sql
