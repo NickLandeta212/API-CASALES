@@ -1,65 +1,40 @@
 const path = require('path');
-const http = require('http');
-const { app, BrowserWindow, dialog } = require('electron');
-const { fork } = require('child_process');
 const fs = require('fs');
-
-let backendProcess = null;
-let backendOutputTail = '';
-let backendRestartAttempts = 0;
-let backendStableTimer = null;
-
-const MAX_BACKEND_RESTARTS = 3;
-const BACKEND_STABLE_MS = 5000;
-const BACKEND_READY_TIMEOUT_MS = 15000;
+const { app, BrowserWindow, dialog } = require('electron');
 
 const DESKTOP_CONFIG_FILE = 'desktop-config.json';
+const DEFAULT_DEV_API_BASE_URL = 'http://127.0.0.1:3000';
+const DEFAULT_DEV_PUBLIC_APP_URL = 'http://localhost:5173';
 
-function appendBackendOutput(chunk) {
-  if (!chunk) {
-    return;
-  }
-
-  backendOutputTail = `${backendOutputTail}${String(chunk)}`;
-
-  if (backendOutputTail.length > 3000) {
-    backendOutputTail = backendOutputTail.slice(-3000);
-  }
-}
-
-function parseDotEnv(content) {
-  const result = {};
-
-  for (const rawLine of String(content).split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) {
-      continue;
-    }
-
-    const separatorIndex = line.indexOf('=');
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    result[key] = value;
-  }
-
-  return result;
-}
+let runtimeConfig = {
+  API_BASE_URL: DEFAULT_DEV_API_BASE_URL,
+  PUBLIC_APP_URL: DEFAULT_DEV_PUBLIC_APP_URL,
+};
 
 function isDev() {
   return !app.isPackaged;
 }
 
-function getDesktopConfigPath() {
-  return path.join(app.getPath('userData'), DESKTOP_CONFIG_FILE);
+function stripTrailingSlash(value) {
+  return String(value ?? '').trim().replace(/\/+$/, '');
 }
 
-function readDesktopConfig() {
-  const configPath = getDesktopConfigPath();
+function parseDesktopConfigPayload(payload) {
+  const data = payload && typeof payload === 'object' ? payload : {};
 
+  return {
+    API_BASE_URL: stripTrailingSlash(data.API_BASE_URL || data.apiBaseUrl || ''),
+    PUBLIC_APP_URL: stripTrailingSlash(data.PUBLIC_APP_URL || data.publicAppUrl || ''),
+  };
+}
+
+function removeEmptyConfigValues(config) {
+  return Object.fromEntries(
+    Object.entries(config).filter(([, value]) => String(value || '').trim())
+  );
+}
+
+function readDesktopConfigFile(configPath) {
   if (!fs.existsSync(configPath)) {
     return {};
   }
@@ -72,90 +47,44 @@ function readDesktopConfig() {
   }
 }
 
-function sanitizeDesktopConfig(payload) {
-  const data = payload && typeof payload === 'object' ? payload : {};
-
-  return {
-    DATABASE_URL: String(data.DATABASE_URL || '').trim(),
-    JWT_SECRET: String(data.JWT_SECRET || '').trim(),
-    CORS_ORIGIN: String(data.CORS_ORIGIN || '*').trim() || '*',
-    PUBLIC_APP_URL: String(data.PUBLIC_APP_URL || '').trim(),
-    PORT: String(data.PORT || '3000').trim() || '3000',
-  };
-}
-
-function removeEmptyConfigValues(config) {
-  return Object.fromEntries(
-    Object.entries(config).filter(([, value]) => String(value || '').trim())
-  );
-}
-
-function getPackagedBackendEnv() {
-  const backendRoot = path.join(process.resourcesPath, 'backend');
-  const desktopEnvPath = path.join(backendRoot, '.env.desktop');
-
-  if (!fs.existsSync(desktopEnvPath)) {
+function getEmbeddedDesktopConfig() {
+  if (isDev()) {
     return {};
   }
 
-  return parseDotEnv(fs.readFileSync(desktopEnvPath, 'utf8'));
+  return readDesktopConfigFile(path.join(__dirname, 'assets', DESKTOP_CONFIG_FILE));
 }
 
-function buildEffectiveBackendEnv() {
-  const packagedEnv = isDev() ? {} : getPackagedBackendEnv();
-  const userConfig = removeEmptyConfigValues(sanitizeDesktopConfig(readDesktopConfig()));
-
-  return {
-    ...packagedEnv,
-    ...userConfig,
-  };
+function getUserDesktopConfig() {
+  return readDesktopConfigFile(path.join(app.getPath('userData'), DESKTOP_CONFIG_FILE));
 }
 
-function hasRequiredBackendConfig(env) {
-  return Boolean(String(env.DATABASE_URL || '').trim() && String(env.JWT_SECRET || '').trim());
-}
-
-function waitForBackendReady(port, timeoutMs = BACKEND_READY_TIMEOUT_MS) {
-  const startedAt = Date.now();
-
-  return new Promise((resolve) => {
-    const attempt = () => {
-      const request = http.get({
-        hostname: '127.0.0.1',
-        port: Number(port) || 3000,
-        path: '/',
-        timeout: 1500,
-      }, (response) => {
-        response.resume();
-        if (response.statusCode && response.statusCode < 500) {
-          resolve(true);
-          return;
-        }
-
-        if (Date.now() - startedAt >= timeoutMs) {
-          resolve(false);
-          return;
-        }
-
-        setTimeout(attempt, 300);
-      });
-
-      request.on('error', () => {
-        if (Date.now() - startedAt >= timeoutMs) {
-          resolve(false);
-          return;
-        }
-
-        setTimeout(attempt, 300);
-      });
-
-      request.on('timeout', () => {
-        request.destroy();
-      });
-    };
-
-    attempt();
+function buildRuntimeDesktopConfig() {
+  const envConfig = parseDesktopConfigPayload({
+    API_BASE_URL: process.env.DESKTOP_API_BASE_URL,
+    PUBLIC_APP_URL: process.env.DESKTOP_PUBLIC_APP_URL,
   });
+
+  const embeddedConfig = getEmbeddedDesktopConfig();
+  const userConfig = getUserDesktopConfig();
+
+  const defaultConfig = isDev()
+    ? {
+        API_BASE_URL: DEFAULT_DEV_API_BASE_URL,
+        PUBLIC_APP_URL: DEFAULT_DEV_PUBLIC_APP_URL,
+      }
+    : {};
+
+  return removeEmptyConfigValues({
+    ...defaultConfig,
+    ...parseDesktopConfigPayload(embeddedConfig),
+    ...parseDesktopConfigPayload(userConfig),
+    ...envConfig,
+  });
+}
+
+function hasRequiredDesktopConfig(config) {
+  return Boolean(String(config.API_BASE_URL || '').trim() && String(config.PUBLIC_APP_URL || '').trim());
 }
 
 function getFrontendEntry() {
@@ -172,6 +101,18 @@ function getFrontendEntry() {
   };
 }
 
+async function showConfigurationError(detail) {
+  await dialog.showMessageBox({
+    type: 'error',
+    title: 'Configuracion incompleta',
+    message: 'La aplicacion no tiene configurada la API central.',
+    detail,
+    buttons: ['Cerrar'],
+    defaultId: 0,
+    cancelId: 0,
+  });
+}
+
 async function showFrontendLoadError(detail) {
   await dialog.showMessageBox({
     type: 'error',
@@ -184,117 +125,10 @@ async function showFrontendLoadError(detail) {
   });
 }
 
-async function startBackendForPackagedApp() {
-  if (isDev()) {
-    return true;
-  }
-
-  const backendRoot = path.join(process.resourcesPath, 'backend');
-  const backendEntry = path.join(backendRoot, 'src', 'server.js');
-
-  let effectiveEnv = buildEffectiveBackendEnv();
-
-  if (!hasRequiredBackendConfig(effectiveEnv)) {
-    await dialog.showMessageBox({
-      type: 'error',
-      title: 'Configuracion incompleta',
-      message: 'No se puede iniciar la aplicacion porque faltan DATABASE_URL o JWT_SECRET en la configuracion embebida del instalador.',
-      detail: 'Genera nuevamente el instalador incluyendo backend/.env.desktop con los valores requeridos.',
-      buttons: ['Cerrar'],
-      defaultId: 0,
-      cancelId: 0,
-    });
-    app.quit();
-    return false;
-  }
-
-  backendProcess = fork(backendEntry, {
-    cwd: backendRoot,
-    env: {
-      ...process.env,
-      ...effectiveEnv,
-      NODE_ENV: 'production',
-      ALLOW_START_WITHOUT_DB: effectiveEnv.ALLOW_START_WITHOUT_DB || process.env.ALLOW_START_WITHOUT_DB || 'false',
-    },
-    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-  });
-
-  backendOutputTail = '';
-  backendProcess.stdout?.on('data', (chunk) => appendBackendOutput(chunk));
-  backendProcess.stderr?.on('data', (chunk) => appendBackendOutput(chunk));
-
-  if (backendStableTimer) {
-    clearTimeout(backendStableTimer);
-    backendStableTimer = null;
-  }
-
-  backendStableTimer = setTimeout(() => {
-    backendRestartAttempts = 0;
-  }, BACKEND_STABLE_MS);
-
-  backendProcess.once('exit', async (code, signal) => {
-    if (backendStableTimer) {
-      clearTimeout(backendStableTimer);
-      backendStableTimer = null;
-    }
-
-    if (!app.isQuitting) {
-      if (backendRestartAttempts < MAX_BACKEND_RESTARTS) {
-        backendRestartAttempts += 1;
-        await startBackendForPackagedApp();
-        return;
-      }
-
-      await dialog.showMessageBox({
-        type: 'error',
-        title: 'Backend detenido',
-        message: `El backend se cerró inesperadamente. Code: ${code ?? 'n/a'}, Signal: ${signal ?? 'n/a'}`,
-        detail: [
-          'Cierra y vuelve a abrir la aplicacion. Si el problema persiste, revisa la configuracion de base de datos embebida del instalador.',
-          backendOutputTail ? `\n\nUltimos logs del backend:\n${backendOutputTail.trim()}` : '',
-        ].join(''),
-        buttons: ['Salir'],
-        defaultId: 0,
-        cancelId: 0,
-      });
-
-      app.quit();
-    }
-  });
-
-  const backendReady = await waitForBackendReady(effectiveEnv.PORT);
-  if (!backendReady) {
-    await dialog.showMessageBox({
-      type: 'error',
-      title: 'Backend no disponible',
-      message: 'La API interna no respondio a tiempo al iniciar.',
-      detail: backendOutputTail ? `Ultimos logs del backend:\n${backendOutputTail.trim()}` : 'Verifica DATABASE_URL, JWT_SECRET y conectividad a la base de datos.',
-      buttons: ['Cerrar'],
-      defaultId: 0,
-      cancelId: 0,
-    });
-    app.quit();
-    return false;
-  }
-
-  return true;
-}
-
-function stopBackend() {
-  if (backendStableTimer) {
-    clearTimeout(backendStableTimer);
-    backendStableTimer = null;
-  }
-
-  if (!backendProcess || backendProcess.killed) {
-    return;
-  }
-
-  backendProcess.kill('SIGTERM');
-  backendProcess = null;
-}
-
 async function createWindow() {
+  process.env.DESKTOP_API_BASE_URL = runtimeConfig.API_BASE_URL;
+  process.env.DESKTOP_PUBLIC_APP_URL = runtimeConfig.PUBLIC_APP_URL;
+
   const win = new BrowserWindow({
     width: 1366,
     height: 820,
@@ -333,30 +167,38 @@ async function createWindow() {
       app.quit();
       return;
     }
-    win.webContents.openDevTools({ mode: 'detach' });
-  } else {
-    if (!fs.existsSync(entry.value)) {
-      await showFrontendLoadError(
-        `No existe el archivo esperado del frontend:\n${entry.value}\n\nGenera nuevamente el instalador.`
-      );
-      app.quit();
-      return;
-    }
 
-    try {
-      await win.loadFile(entry.value);
-    } catch (error) {
-      await showFrontendLoadError(`No se pudo abrir ${entry.value}\n\n${error.message}`);
-      app.quit();
-    }
+    win.webContents.openDevTools({ mode: 'detach' });
+    return;
+  }
+
+  if (!fs.existsSync(entry.value)) {
+    await showFrontendLoadError(
+      `No existe el archivo esperado del frontend:\n${entry.value}\n\nGenera nuevamente el instalador.`
+    );
+    app.quit();
+    return;
+  }
+
+  try {
+    await win.loadFile(entry.value);
+  } catch (error) {
+    await showFrontendLoadError(`No se pudo abrir ${entry.value}\n\n${error.message}`);
+    app.quit();
   }
 }
 
 app.on('ready', async () => {
-  const backendStarted = await startBackendForPackagedApp();
-  if (!backendStarted) {
+  runtimeConfig = buildRuntimeDesktopConfig();
+
+  if (!hasRequiredDesktopConfig(runtimeConfig)) {
+    await showConfigurationError(
+      'Falta definir DESKTOP_API_BASE_URL y DESKTOP_PUBLIC_APP_URL para el instalador.\n\nGenera nuevamente el build con electron/scripts/prepare-desktop-config.js o edita %APPDATA%/Conjunto App/desktop-config.json.'
+    );
+    app.quit();
     return;
   }
+
   await createWindow();
 });
 
@@ -369,7 +211,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  stopBackend();
 });
 
 app.on('activate', async () => {

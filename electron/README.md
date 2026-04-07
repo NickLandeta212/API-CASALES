@@ -17,16 +17,16 @@ Esto levanta:
 
 ## Generar instalador .exe
 
-Antes de generar el instalador, define las variables para embebidas en el backend desktop:
+La version de escritorio ya no embebe un backend local. Todas las PCs deben apuntar a una API central desplegada en linea y a una URL publica unica para el QR.
+
+Antes de generar el instalador, define las variables para embebidas en el desktop:
 
 ```powershell
-$env:DESKTOP_DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME"
-$env:DESKTOP_JWT_SECRET="TU_SECRETO_LARGO_Y_FUERTE"
-$env:DESKTOP_CORS_ORIGIN="*"
-$env:DESKTOP_PUBLIC_APP_URL="https://tu-dominio-publico.com"
+$env:DESKTOP_API_BASE_URL="https://api.tu-dominio.com"
+$env:DESKTOP_PUBLIC_APP_URL="https://app.tu-dominio.com"
 ```
 
-Nota: desde ahora, si no defines estas variables en la terminal, el build reutiliza automaticamente lo que ya exista en `backend/.env.desktop`.
+Si quieres reutilizar valores ya guardados, el build toma la configuracion previa de `electron/assets/desktop-config.json`.
 
 Desde la raiz del proyecto:
 
@@ -38,14 +38,12 @@ Salida esperada:
 - carpeta `dist-electron/`
 - instalador NSIS para Windows (`Conjunto-App-Setup-<version>.exe`)
 - icono personalizado generado automaticamente desde `frontend/src/assets/casales-san-pedro-logo.svg`
-- configuracion backend embebida automaticamente en `backend/.env.desktop`
+- configuracion online embebida automaticamente en `electron/assets/desktop-config.json`
 
 ## Notas importantes
 
-- En build empaquetado, Electron inicia automaticamente el backend interno.
-- El instalador final ya lleva configurado el backend con `DESKTOP_DATABASE_URL` y `DESKTOP_JWT_SECRET` (sin editar nada en la laptop destino).
-- Si `backend/.env.desktop` tiene `DATABASE_URL` y `JWT_SECRET` validos al momento de empaquetar, el .exe abre directo y llega al login sin pedir configuracion manual.
-- La ventana de configuracion inicial fue removida del ejecutable: el arranque es automatico.
-- Si la configuracion embebida no existe o falla, la app muestra error y se cierra para evitar arranques incompletos.
-- La configuracion local del equipo destino se guarda en `%APPDATA%/Conjunto App/desktop-config.json`.
-- Si apuntas a una base remota, verifica conectividad de red desde el equipo final.
+- El .exe ya no levanta un backend interno; solo consume la API central configurada.
+- Todas las PCs deben usar la misma `DESKTOP_API_BASE_URL` para que los datos se sincronicen entre dispositivos.
+- `DESKTOP_PUBLIC_APP_URL` se usa para generar los QR publicos de reservas.
+- Si la app arranca sin configuracion valida, muestra error y se cierra para evitar un estado parcial.
+- La configuracion local del equipo destino se guarda en `%APPDATA%/Conjunto App/desktop-config.json` y puede sobreescribir la configuracion embebida.

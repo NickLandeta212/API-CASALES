@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import QRCode from 'qrcode'
 import api from '../lib/api'
 import { useAuth } from '../context/useAuth'
 
@@ -30,7 +31,7 @@ function stripTrailingSlash(value) {
 }
 
 function resolvePublicAppBaseUrl() {
-  const configured = stripTrailingSlash(import.meta.env.VITE_PUBLIC_APP_URL)
+  const configured = stripTrailingSlash(window.desktopInfo?.publicAppUrl || import.meta.env.VITE_PUBLIC_APP_URL)
   if (configured) return configured
   return stripTrailingSlash(window.location.origin)
 }
@@ -504,8 +505,18 @@ function ResourcePage({ resource }) {
       const publicBase = resolvePublicAppBaseUrl()
       const fallbackUrl = `${publicBase}/reservas-publicas/${data.token}`
       const url = String(data.public_url || '').trim() || fallbackUrl
+      const qrImage = await QRCode.toDataURL(url, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 260,
+        color: {
+          dark: '#173126',
+          light: '#ffffff',
+        },
+      })
+
       setReservaQrLink(url)
-      setReservaQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`)
+      setReservaQrImage(qrImage)
       setReservaQrMessage('QR general permanente listo. Este codigo se mantiene igual para escanear siempre.')
     } catch (requestError) {
       setReservaQrError(requestError?.response?.data?.message || 'No se pudo generar el QR general de reservas')

@@ -8,11 +8,10 @@
   "scripts": {
     "desktop:dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\" \"wait-on tcp:5173 && electron .\"",
     "desktop:icon": "node electron/scripts/generate-icon.js",
-    "desktop:prepare-env": "node electron/scripts/prepare-backend-env.js",
+    "desktop:prepare-config": "node electron/scripts/prepare-desktop-config.js",
     "desktop:build:renderer": "npm --prefix frontend run build",
-    "desktop:build:backend-deps": "npm --prefix backend install --omit=dev",
-    "desktop:pack": "npm run desktop:icon && npm run desktop:prepare-env && npm run desktop:build:renderer && npm run desktop:build:backend-deps && electron-builder --dir",
-    "desktop:dist": "npm run desktop:icon && npm run desktop:prepare-env && npm run desktop:build:renderer && npm run desktop:build:backend-deps && electron-builder"
+    "desktop:pack": "npm run desktop:icon && npm run desktop:prepare-config && npm run desktop:build:renderer && electron-builder --dir",
+    "desktop:dist": "npm run desktop:icon && npm run desktop:prepare-config && npm run desktop:build:renderer && electron-builder"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -38,19 +37,6 @@
       "electron/**/*",
       "frontend/dist/**/*",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!node_modules/.cache/**/*"
-        ]
-      }
-    ],
-    "asarUnpack": [
-      "backend/**"
     ],
     "win": {
       "icon": "electron/assets/icon.ico",
