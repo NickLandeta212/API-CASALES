@@ -35,11 +35,11 @@ function isAbsoluteHttpUrl(value) {
 }
 
 function resolvePublicAppBaseUrl() {
-  const configured = stripTrailingSlash(window.desktopInfo?.publicAppUrl || import.meta.env.VITE_PUBLIC_APP_URL)
+  const configured = stripTrailingSlash(import.meta.env.VITE_PUBLIC_APP_URL)
   if (configured && isAbsoluteHttpUrl(configured)) return configured
 
-  const desktopApiBase = stripTrailingSlash(window.desktopInfo?.apiBaseUrl)
-  if (desktopApiBase && isAbsoluteHttpUrl(desktopApiBase)) return desktopApiBase
+  const apiBase = stripTrailingSlash(api.defaults.baseURL)
+  if (apiBase && isAbsoluteHttpUrl(apiBase)) return apiBase
 
   return ''
 }
@@ -546,7 +546,7 @@ function ResourcePage({ resource }) {
       const url = String(data.public_url || '').trim() || (publicBase ? fallbackUrl : '')
 
       if (!url) {
-        setReservaQrError('No hay URL publica configurada. Define DESKTOP_PUBLIC_APP_URL o PUBLIC_APP_URL en el backend.')
+        setReservaQrError('No hay URL publica configurada. Define VITE_PUBLIC_APP_URL en frontend o PUBLIC_APP_URL en el backend.')
         return
       }
 

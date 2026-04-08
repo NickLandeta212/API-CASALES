@@ -1,10 +1,26 @@
 import axios from 'axios'
 
-const runtimeDesktopApiBaseUrl =
-  typeof window !== 'undefined' ? window.desktopInfo?.apiBaseUrl : undefined
+function resolveWebApiBaseUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:3000'
+    }
+
+    // In production web deployments, default to same-origin API routing.
+    return window.location.origin
+  }
+
+  return 'http://localhost:3000'
+}
 
 const api = axios.create({
-  baseURL: runtimeDesktopApiBaseUrl || import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  baseURL: resolveWebApiBaseUrl(),
   timeout: 10000,
 })
 

@@ -1,17 +1,18 @@
 {
   "name": "conjunto-app",
   "version": "1.0.0",
-  "description": "Aplicacion de gestion para conjunto habitacional (backend + frontend + desktop Electron).",
+  "description": "Aplicacion web de gestion para conjunto habitacional (backend + frontend).",
   "author": "Nick Landeta",
   "private": true,
-  "main": "electron/main.js",
   "scripts": {
-    "desktop:dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\" \"wait-on tcp:5173 && electron .\"",
-    "desktop:icon": "node electron/scripts/generate-icon.js",
-    "desktop:prepare-config": "node electron/scripts/prepare-desktop-config.js",
-    "desktop:build:renderer": "npm --prefix frontend run build",
-    "desktop:pack": "npm run desktop:icon && npm run desktop:prepare-config && npm run desktop:build:renderer && electron-builder --dir",
-    "desktop:dist": "npm run desktop:icon && npm run desktop:prepare-config && npm run desktop:build:renderer && electron-builder"
+    "postinstall": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm run web:build",
+    "start": "npm run api:start",
+    "dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "web:dev": "concurrently -k \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "web:build": "npm --prefix frontend run build",
+    "web:preview": "npm --prefix frontend run preview",
+    "api:start": "npm --prefix backend start"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -20,56 +21,6 @@
     "pg": "^8.20.0"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "electron": "^37.2.0",
-    "electron-builder": "^24.13.3",
-    "png-to-ico": "^2.1.8",
-    "sharp": "^0.34.4",
-    "wait-on": "^8.0.5"
-  },
-  "build": {
-    "appId": "com.casales.conjunto",
-    "productName": "Conjunto App",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "electron/**/*",
-      "frontend/dist/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!postman/**/*",
-          "!README.md",
-          "!.env.example",
-          "!.env",
-          "!.env.local",
-          "!.env.development",
-          "!.env.production",
-          "!.env.test"
-        ]
-      }
-    ],
-    "asarUnpack": [
-      "backend/**"
-    ],
-    "win": {
-      "icon": "electron/assets/icon.ico",
-      "artifactName": "Conjunto-App-Setup-${version}.${ext}",
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+    "concurrently": "^9.2.1"
   }
 }

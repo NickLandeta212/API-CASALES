@@ -180,13 +180,13 @@ function renderPublicReservationPage(token) {
     const state = { torres: [], departamentos: [], reservedDates: [], selectedDate: '' };
 
     function showMessage(type, message) {
-      statusEl.innerHTML = message ? `<div class="${type}">${message}</div>` : '';
+      statusEl.innerHTML = message ? \`<div class="\${type}">\${message}</div>\` : '';
     }
 
     function pad(value) { return String(value).padStart(2, '0'); }
 
     function formatDate(date) {
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+      return \`\${date.getFullYear()}-\${pad(date.getMonth() + 1)}-\${pad(date.getDate())}\`;
     }
 
     function renderDates() {
@@ -212,14 +212,14 @@ function renderPublicReservationPage(token) {
 
     async function loadContext() {
       try {
-        const response = await fetch(`/reservas/public/${token}/context`);
+        const response = await fetch(\`/reservas/public/\${token}/context\`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'No se pudo cargar el formulario');
         state.torres = data.torres || [];
         state.departamentos = data.departamentos || [];
         state.reservedDates = data.reserved_dates || [];
         const torreSelect = document.querySelector('select[name="torre_id"]');
-        torreSelect.innerHTML = '<option value="">Selecciona tu torre</option>' + state.torres.map((torre) => `<option value="${torre.id}">Torre ${torre.numero}</option>`).join('');
+        torreSelect.innerHTML = '<option value="">Selecciona tu torre</option>' + state.torres.map((torre) => \`<option value="\${torre.id}">Torre \${torre.numero}</option>\`).join('');
         renderDates();
       } catch (error) {
         showMessage('error', error.message);
@@ -231,7 +231,7 @@ function renderPublicReservationPage(token) {
       const departmentSelect = document.querySelector('select[name="departamento_id"]');
       const filtered = state.departamentos.filter((item) => String(item.torre_id) === String(torreId));
       departmentSelect.disabled = !torreId;
-      departmentSelect.innerHTML = '<option value="">Selecciona tu departamento</option>' + filtered.map((dep) => `<option value="${dep.id}">Torre ${dep.torre_numero} · Dpto ${dep.numero}</option>`).join('');
+      departmentSelect.innerHTML = '<option value="">Selecciona tu departamento</option>' + filtered.map((dep) => \`<option value="\${dep.id}">Torre \${dep.torre_numero} · Dpto \${dep.numero}</option>\`).join('');
     }
 
     copyLink.addEventListener('click', async (event) => {
@@ -260,7 +260,7 @@ function renderPublicReservationPage(token) {
         showMessage('error', 'Completa nombres, apellidos, documento, torre y departamento');
         return;
       }
-      selectedInfo.textContent = `Torre ${torre_id} - Departamento ${departamento_id}`;
+      selectedInfo.textContent = \`Torre \${torre_id} - Departamento \${departamento_id}\`;
       step1.style.display = 'none';
       step2.style.display = 'grid';
       showMessage('', '');
@@ -293,7 +293,7 @@ function renderPublicReservationPage(token) {
           fecha,
         };
 
-        const response = await fetch(`/reservas/public/${token}`, {
+        const response = await fetch(\`/reservas/public/\${token}\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -301,7 +301,7 @@ function renderPublicReservationPage(token) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'No se pudo registrar la reserva');
         showMessage('ok', data.message || 'Reserva registrada correctamente');
-        const refresh = await fetch(`/reservas/public/${token}/context`);
+        const refresh = await fetch(\`/reservas/public/\${token}/context\`);
         const refreshData = await refresh.json();
         state.reservedDates = refreshData.reserved_dates || [];
         renderDates();

@@ -22,9 +22,9 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 6. Ejecuta el schema en PostgreSQL
 7. Inicia el servidor con `npm start`
 
-## Despliegue online
+## Despliegue online (recomendado)
 
-Este backend es el punto central que deben consumir todas las PCs y la version web. Para sincronizar datos entre dispositivos, desplegalo en un servidor unico con una base PostgreSQL compartida y usa la misma URL desde el desktop.
+Este backend es el punto central del producto en modo web. Para sincronizar datos entre dispositivos, desplegalo en un servidor unico con una base PostgreSQL compartida y apunta el frontend web a esa URL.
 
 Si vas a usar Supabase, crea el proyecto, toma la cadena de conexion de Postgres y configúrala como `DATABASE_URL`. Supabase exige SSL, asi que deja `PGSSL=true` o agrega `sslmode=require` en la URL.
 
@@ -41,7 +41,7 @@ Variables recomendadas para produccion:
 
 - `DATABASE_URL` o `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`
 - `JWT_SECRET`
-- `CORS_ORIGIN` con la URL del frontend web y, si hace falta, `*` para escritorio
+- `CORS_ORIGIN` con la URL del frontend web
 - `PUBLIC_APP_URL` con la URL publica del frontend web usado por los QR
 
 Para cargar las torres y los departamentos base, ejecuta tambien `../database/seed.sql`.

@@ -5,27 +5,47 @@ Monorepo separado por responsabilidades:
 - backend: API REST Node.js + Express
 - database: scripts SQL (schema y seed) para PostgreSQL
 - frontend: app React (Vite)
-- electron: app de escritorio Electron que consume la API central
 
-## Flujo recomendado
+## Enfoque actual (Web)
 
-1. Backend:
-   - cd backend
-   - npm install
-   - npm run db:init
-   - npm start
+El flujo principal del proyecto ahora es web: una sola API central + frontend web.
 
-2. Frontend:
-   - cd frontend
-   - npm install
-   - copia .env.example a .env
-   - npm run dev
+## Desarrollo local rapido
 
-3. Desktop online:
-   - define `DESKTOP_API_BASE_URL` y `DESKTOP_PUBLIC_APP_URL`
-   - ejecuta `npm run desktop:dist`
+1. Instalar dependencias de backend y frontend:
+   - npm --prefix backend install
+   - npm --prefix frontend install
 
-Si quieres que varios dispositivos compartan datos en tiempo real, la base de datos central puede ser Supabase Postgres; el backend ya acepta `DATABASE_URL` con SSL.
+2. Crear archivo de entorno del backend:
+   - copia backend/.env.example a backend/.env
+   - configura DATABASE_URL y JWT_SECRET
+
+3. Levantar API + frontend:
+   - npm run web:dev
+
+4. Abrir en navegador:
+   - frontend: http://localhost:5173
+   - api: http://localhost:3000
+
+## Produccion web
+
+Modo recomendado: desplegar este repositorio como un solo servicio Node.js.
+
+1. Build command: `npm install && npm run build`
+2. Start command: `npm start`
+3. Variables de entorno requeridas:
+   - `DATABASE_URL`
+   - `JWT_SECRET`
+   - `PGSSL=true` (si usas Supabase)
+4. Variables recomendadas:
+   - `CORS_ORIGIN=https://tu-dominio.com`
+   - `PUBLIC_APP_URL=https://tu-dominio.com`
+
+En produccion, el backend sirve automaticamente `frontend/dist` y mantiene las rutas API.
+
+## Healthcheck
+
+- `GET /health` devuelve `{ "ok": true }`
 
 ## Estructura
 
