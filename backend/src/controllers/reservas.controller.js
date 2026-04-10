@@ -111,11 +111,12 @@ function renderPublicReservationPage(token) {
     .section { margin-top: 20px; }
     .calendar { display: grid; gap: 8px; grid-template-columns: repeat(7, minmax(0, 1fr)); }
     .day, .empty { min-height: 54px; border-radius: 10px; border: 1px solid #d8e6da; display:flex; align-items:center; justify-content:center; }
-    .day { background: #fff; cursor: pointer; }
+    .day { background: #fff; color: #173126; font-weight: 700; cursor: pointer; }
     .day.selected { background: #173126; color: #fff; }
     .day.disabled { background: #eef2ee; color: #92a195; cursor: not-allowed; }
     .weekday { font-size: 12px; color: #52645a; text-align: center; }
     .small { font-size: 12px; }
+    .proof-preview { width: 100%; max-width: 260px; border-radius: 12px; border: 1px solid #d8e6da; display: block; margin-top: 8px; }
     @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -157,6 +158,13 @@ function renderPublicReservationPage(token) {
           <p class="small muted">Fechas reservadas / ocupadas</p>
           <div class="calendar" id="dates"></div>
         </div>
+        <div>
+          <label>
+            Foto del comprobante (opcional)
+            <input id="proofFile" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <img id="proofPreview" class="proof-preview" alt="Vista previa comprobante" style="display:none;" />
+        </div>
         <div class="actions">
           <button type="button" id="backBtn">Volver</button>
           <button type="submit" id="submitBtn">Enviar reserva</button>
@@ -175,6 +183,8 @@ function renderPublicReservationPage(token) {
     const submitBtn = document.getElementById('submitBtn');
     const selectedInfo = document.getElementById('selectedInfo');
     const datesEl = document.getElementById('dates');
+    const proofFileInput = document.getElementById('proofFile');
+    const proofPreview = document.getElementById('proofPreview');
     const today = new Date();
     const minDate = today.toISOString().slice(0, 10);
     const state = { torres: [], departamentos: [], reservedDates: [], selectedDate: '' };
@@ -187,6 +197,15 @@ function renderPublicReservationPage(token) {
 
     function formatDate(date) {
       return \`\${date.getFullYear()}-\${pad(date.getMonth() + 1)}-\${pad(date.getDate())}\`;
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('No se pudo leer el comprobante'));
+        reader.readAsDataURL(file);
+      });
     }
 
     function renderDates() {
@@ -271,6 +290,19 @@ function renderPublicReservationPage(token) {
       step1.style.display = 'grid';
     });
 
+    proofFileInput.addEventListener('change', () => {
+      const file = proofFileInput.files && proofFileInput.files[0] ? proofFileInput.files[0] : null;
+      if (!file) {
+        proofPreview.style.display = 'none';
+        proofPreview.src = '';
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      proofPreview.src = objectUrl;
+      proofPreview.style.display = 'block';
+    });
+
     step2.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form1 = new FormData(step1);
@@ -283,6 +315,12 @@ function renderPublicReservationPage(token) {
 
       submitBtn.disabled = true;
       try {
+        let comprobanteBase64 = '';
+        const proofFile = proofFileInput.files && proofFileInput.files[0] ? proofFileInput.files[0] : null;
+        if (proofFile) {
+          comprobanteBase64 = await fileToDataUrl(proofFile);
+        }
+
         const payload = {
           nombres: String(form1.get('nombres') || '').trim(),
           apellidos: String(form1.get('apellidos') || '').trim(),
@@ -291,6 +329,7 @@ function renderPublicReservationPage(token) {
           observaciones: String(form2.get('observaciones') || '').trim(),
           departamento_id: Number(String(form1.get('departamento_id') || '0')),
           fecha,
+          comprobante_base64: comprobanteBase64,
         };
 
         const response = await fetch(\`/reservas/public/\${token}\`, {
@@ -539,6 +578,8 @@ const generatePublicToken = asyncHandler(async (req, res) => {
 
 const publicPage = asyncHandler(async (req, res) => {
   verifyPublicReservaToken(req.params.token);
+  // Esta vista usa CSS/JS inline; habilitamos CSP especifica para esta ruta.
+  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'self'; form-action 'self'");
   res.type('html').send(renderPublicReservationPage(req.params.token));
 });
 
