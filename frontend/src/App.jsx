@@ -22,6 +22,7 @@ function App() {
         path="/login"
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
       />
+      <Route path="/reservas/public/:token" element={<PublicReservaPage />} />
       <Route path="/reservas-publicas/:token" element={<PublicReservaPage />} />
       <Route
         path="/"
