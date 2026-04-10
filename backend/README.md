@@ -26,6 +26,10 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 
 Este backend es el punto central del producto en modo web. Para sincronizar datos entre dispositivos, desplegalo en un servidor unico con una base PostgreSQL compartida y apunta el frontend web a esa URL.
 
+En el despliegue web, solo se expone el puerto HTTP/HTTPS de la aplicacion. La conexion a PostgreSQL debe quedar privada por variables de entorno y no como un puerto publico del servidor.
+
+Recomendacion practica: usa una sola URL publica para la app y mantiene PostgreSQL completamente fuera de acceso directo desde internet.
+
 Si vas a usar Supabase, crea el proyecto, toma la cadena de conexion de Postgres y configúrala como `DATABASE_URL`. Supabase exige SSL, asi que deja `PGSSL=true` o agrega `sslmode=require` en la URL.
 
 Ejemplo:

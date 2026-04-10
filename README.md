@@ -43,6 +43,19 @@ Modo recomendado: desplegar este repositorio como un solo servicio Node.js.
 
 En produccion, el backend sirve automaticamente `frontend/dist` y mantiene las rutas API.
 
+Seguridad de red:
+
+- El unico puerto publico debe ser el HTTP/HTTPS de la app.
+- La base de datos no se expone como puerto publico del proyecto; solo se usa por variables secretas de entorno.
+- Si usas Supabase, la conexion va por `DATABASE_URL` y no necesitas abrir puertos de PostgreSQL en tu servidor web.
+
+Flujo simple de publicacion:
+
+1. Sube el repo a GitHub.
+2. Crea el servicio en Render usando `render.yaml`.
+3. Pega las variables de entorno.
+4. Publica.
+
 ## Healthcheck
 
 - `GET /health` devuelve `{ "ok": true }`
