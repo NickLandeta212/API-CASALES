@@ -17,10 +17,36 @@ Backend en Node.js con Express y PostgreSQL para administrar torres, departament
 1. Copia `.env.example` a `.env`
 2. Ajusta credenciales de PostgreSQL (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) o `DATABASE_URL`
 3. Define un `JWT_SECRET` fuerte
-4. Si el QR publico se usara fuera de red local, define `PUBLIC_APP_URL` con tu dominio publico (ejemplo: `https://app.tudominio.com`)
+4. Si el QR publico se usara fuera de red local, define `PUBLIC_APP_URL` con tu dominio publico (ejemplo: `https://app.tudominio.com`). Si no lo defines, la app igual arranca, pero el QR dependera de la URL que devuelva el backend.
 5. Ajusta `CORS_ORIGIN` con tus origenes permitidos (separados por comas)
 6. Ejecuta el schema en PostgreSQL
 7. Inicia el servidor con `npm start`
+
+## Despliegue online (recomendado)
+
+Este backend es el punto central del producto en modo web. Para sincronizar datos entre dispositivos, desplegalo en un servidor unico con una base PostgreSQL compartida y apunta el frontend web a esa URL.
+
+En el despliegue web, solo se expone el puerto HTTP/HTTPS de la aplicacion. La conexion a PostgreSQL debe quedar privada por variables de entorno y no como un puerto publico del servidor.
+
+Recomendacion practica: usa una sola URL publica para la app y mantiene PostgreSQL completamente fuera de acceso directo desde internet.
+
+Si vas a usar Supabase, crea el proyecto, toma la cadena de conexion de Postgres y configúrala como `DATABASE_URL`. Supabase exige SSL, asi que deja `PGSSL=true` o agrega `sslmode=require` en la URL.
+
+Ejemplo:
+
+```bash
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres?sslmode=require
+PGSSL=true
+JWT_SECRET=una_clave_larga_y_segura
+PUBLIC_APP_URL=https://app.tu-dominio.com
+```
+
+Variables recomendadas para produccion:
+
+- `DATABASE_URL` o `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`
+- `JWT_SECRET`
+- `CORS_ORIGIN` con la URL del frontend web
+- `PUBLIC_APP_URL` con la URL publica del frontend web usado por los QR
 
 Para cargar las torres y los departamentos base, ejecuta tambien `../database/seed.sql`.
 

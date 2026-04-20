@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import QRCode from 'qrcode'
 import api from '../lib/api'
 import { useAuth } from '../context/useAuth'
 
@@ -29,10 +30,18 @@ function stripTrailingSlash(value) {
   return String(value ?? '').trim().replace(/\/+$/, '')
 }
 
+function isAbsoluteHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value ?? '').trim())
+}
+
 function resolvePublicAppBaseUrl() {
   const configured = stripTrailingSlash(import.meta.env.VITE_PUBLIC_APP_URL)
-  if (configured) return configured
-  return stripTrailingSlash(window.location.origin)
+  if (configured && isAbsoluteHttpUrl(configured)) return configured
+
+  const apiBase = stripTrailingSlash(api.defaults.baseURL)
+  if (apiBase && isAbsoluteHttpUrl(apiBase)) return apiBase
+
+  return ''
 }
 
 function parseDepartmentCode(value) {
@@ -51,7 +60,34 @@ function parseDepartmentCode(value) {
   }
 }
 
+function getDepartmentDisplayNumber(rawCode, torreNumero) {
+  const parsed = parseDepartmentCode(rawCode)
+  return normalizeLegacySpecialDNumber(torreNumero, parsed.codigo_tipo, parsed.codigo_numero)
+}
+
 function normalizeLegacySpecialDNumber(torreNumero, codigoTipo, codigoNumero) {
+  if (!/^[0-9]{1,3}$/.test(String(codigoNumero))) {
+    return codigoNumero
+  }
+
+  const raw = Number(codigoNumero)
+
+  if (codigoTipo === 'PB') {
+    return String(raw).padStart(3, '0')
+  }
+
+  if (codigoTipo === 'SS') {
+    const tower = Number(torreNumero)
+
+    if (tower >= 1 && tower <= 4 && raw >= 1 && raw <= 4) {
+      const floor = Math.floor((raw - 1) / 2) + 1
+      const unit = ((raw - 1) % 2) + 1
+      return `${floor}0${unit}`
+    }
+
+    return String(raw).padStart(3, '0')
+  }
+
   const tower = Number(torreNumero)
   if (tower < 1 || tower > 4 || codigoTipo !== 'D') {
     return codigoNumero
@@ -61,7 +97,6 @@ function normalizeLegacySpecialDNumber(torreNumero, codigoTipo, codigoNumero) {
     return codigoNumero
   }
 
-  const raw = Number(codigoNumero)
   if (raw < 1 || raw > 56) {
     return codigoNumero
   }
@@ -144,7 +179,7 @@ const configMap = {
     ],
     fields: [
       { name: 'torre_id', label: 'Torre', type: 'select', optionsKey: 'torres', optionLabel: (item) => `Torre ${item.numero}`, optionValue: 'id' },
-      { name: 'departamento_id', label: 'Departamento', type: 'select', optionsKey: 'departamentos', optionLabel: (item) => `Torre ${item.torre_numero} - Dpto ${item.numero}`, optionValue: 'id' },
+      { name: 'departamento_id', label: 'Departamento', type: 'select', optionsKey: 'departamentos', optionLabel: (item) => `Torre ${item.torre_numero} - Dpto ${getDepartmentDisplayNumber(item.numero, item.torre_numero ?? item.torre_id)}`, optionValue: 'id' },
       { name: 'nombres', label: 'Nombres', type: 'text' },
       { name: 'apellidos', label: 'Apellidos', type: 'text' },
       { name: 'documento', label: 'Documento', type: 'text' },
@@ -179,7 +214,7 @@ const configMap = {
       { key: 'comprobante', label: 'Comprobante' },
     ],
     fields: [
-      { name: 'departamento_id', label: 'Departamento', type: 'select', optionsKey: 'departamentos', optionLabel: (item) => `Torre ${item.torre_numero} - Dpto ${item.numero}`, optionValue: 'id' },
+      { name: 'departamento_id', label: 'Departamento', type: 'select', optionsKey: 'departamentos', optionLabel: (item) => `Torre ${item.torre_numero} - Dpto ${getDepartmentDisplayNumber(item.numero, item.torre_numero ?? item.torre_id)}`, optionValue: 'id' },
       { name: 'fecha', label: 'Fecha', type: 'date' },
       { name: 'estado', label: 'Estado', type: 'select', options: [
         { value: 'disponible', label: 'Disponible' },
@@ -353,7 +388,7 @@ function ResourcePage({ resource }) {
       const departmentText = String(normalizedNumber).toLowerCase()
       const matchesTower = towerQuery ? towerText.includes(towerQuery) : true
       const matchesNumber = numberQuery ? departmentText.includes(numberQuery) : true
-      const personaDepartmentText = String(item.departamento_numero ?? '').toLowerCase()
+      const personaDepartmentText = String(getDepartmentDisplayNumber(item.departamento_numero, item.torre_numero)).toLowerCase()
       const matchesPersonaTower = personaTowerQuery ? towerText.includes(personaTowerQuery) : true
       const matchesPersonaDepartment = personaDepartmentQuery ? personaDepartmentText.includes(personaDepartmentQuery) : true
 
@@ -420,8 +455,8 @@ function ResourcePage({ resource }) {
         return `torre ${item.torre_numero}`.toLowerCase().includes(personaTowerSearch.trim().toLowerCase())
       })
       .map((item) => ({
-        value: String(item.departamento_numero ?? ''),
-        label: `Dpto ${item.departamento_numero}`,
+        value: String(getDepartmentDisplayNumber(item.departamento_numero, item.torre_numero) ?? ''),
+        label: `Dpto ${getDepartmentDisplayNumber(item.departamento_numero, item.torre_numero)}`,
       }))
       .filter((option) => option.value)
       .filter((option, index, array) => array.findIndex((current) => current.value === option.value) === index)
@@ -455,6 +490,10 @@ function ResourcePage({ resource }) {
 
     if (resource === 'departamentos' && columnKey === 'numero') {
       return item._codigoNumero || normalizeLegacySpecialDNumber(item.torre_numero ?? item.torre_id, parseDepartmentCode(item.numero).codigo_tipo, parseDepartmentCode(item.numero).codigo_numero)
+    }
+
+    if ((resource === 'personas' || resource === 'reservas') && columnKey === 'departamento_numero') {
+      return getDepartmentDisplayNumber(item.departamento_numero, item.torre_numero)
     }
 
     if (resource === 'reservas' && columnKey === 'observaciones') {
@@ -503,9 +542,26 @@ function ResourcePage({ resource }) {
       const { data } = await api.get('/reservas/public-token')
       const publicBase = resolvePublicAppBaseUrl()
       const fallbackUrl = `${publicBase}/reservas-publicas/${data.token}`
-      const url = String(data.public_url || '').trim() || fallbackUrl
+
+      const url = String(data.public_url || '').trim() || (publicBase ? fallbackUrl : '')
+
+      if (!url) {
+        setReservaQrError('No hay URL publica configurada. Define VITE_PUBLIC_APP_URL en frontend o PUBLIC_APP_URL en el backend.')
+        return
+      }
+
+      const qrImage = await QRCode.toDataURL(url, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 260,
+        color: {
+          dark: '#173126',
+          light: '#ffffff',
+        },
+      })
+
       setReservaQrLink(url)
-      setReservaQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(url)}`)
+      setReservaQrImage(qrImage)
       setReservaQrMessage('QR general permanente listo. Este codigo se mantiene igual para escanear siempre.')
     } catch (requestError) {
       setReservaQrError(requestError?.response?.data?.message || 'No se pudo generar el QR general de reservas')

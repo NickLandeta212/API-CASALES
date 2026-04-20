@@ -5,6 +5,7 @@ const { authenticateToken, authorizeRoles } = require('../middlewares/auth');
 const router = express.Router();
 
 router.get('/public/:token/context', reservasController.publicContext);
+router.get('/public/:token', reservasController.publicPage);
 router.post('/public/:token', reservasController.publicCreate);
 router.get('/public-token', authenticateToken, authorizeRoles('admin_general', 'admin_conjunto'), reservasController.generatePublicToken);
 
